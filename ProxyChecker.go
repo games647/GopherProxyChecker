@@ -7,9 +7,12 @@ import (
 	"time"
 	"os"
 	"bufio"
+	"errors"
+	"net/url"
 )
 
 const TIMEOUT = time.Duration(5 * time.Second)
+var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
 func main() {
 	input, err := os.Open(os.Args[1])
@@ -61,9 +64,22 @@ func testProxy(line string) bool {
 	dialSocksProxy := socks.DialSocksProxy(socks.SOCKS5, line)
 	tr := &http.Transport{Dial: dialSocksProxy}
 
-	httpClient := &http.Client{Transport: tr, Timeout: TIMEOUT}
+	httpClient := &http.Client{
+		Transport: tr,
+		Timeout: TIMEOUT,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return REDIRECT_ERROR
+		},
+	}
 	resp, err := httpClient.Get("http://www.google.com")
 	if err != nil {
+		//// test if we got the custom error
+		if urlError, ok := err.(*url.Error); ok && urlError.Err == REDIRECT_ERROR {
+			log.Println("REDIRECT")
+			log.Println("Working proxy (SOCKS5)", line)
+			return true
+		}
+
 		log.Println(err)
 		return false
 	}
