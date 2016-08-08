@@ -17,6 +17,7 @@ https://socksproxylist24.blogspot.de/
 * Response time
 * Socks Version
 * Maybe HTTP Proxies?
+* Specify timeout
 
 ## How to use
 
@@ -31,3 +32,7 @@ or:
 Windows
 
 proxychecker.exe input.txt output.txt
+
+## Credits
+
+* https://github.com/h12w/socks
