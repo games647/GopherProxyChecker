@@ -11,7 +11,7 @@ import (
 	"net/url"
 )
 
-const TIMEOUT = time.Duration(5 * time.Second)
+const TIMEOUT = time.Duration(30 * time.Second)
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
 func main() {
@@ -29,7 +29,10 @@ func main() {
 		proxyLine := scanner.Text()
 		log.Println("Testing ", proxyLine)
 
-		if testProxy(proxyLine) {
+		if testProxy(proxyLine, true) {
+			working = append(working, proxyLine)
+		} else if testProxy(proxyLine, false) {
+			log.Println("Working SOCKS4")
 			working = append(working, proxyLine)
 		}
 	}
@@ -60,23 +63,20 @@ func main() {
 	defer output.Close()
 }
 
-func testProxy(line string) bool {
-	dialSocksProxy := socks.DialSocksProxy(socks.SOCKS5, line)
-	tr := &http.Transport{Dial: dialSocksProxy}
-
+func testProxy(line string, socks5 bool) bool {
 	httpClient := &http.Client{
-		Transport: tr,
+		Transport: createSocksProxy(socks5, line),
 		Timeout: TIMEOUT,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return REDIRECT_ERROR
 		},
 	}
+
 	resp, err := httpClient.Get("http://www.google.com")
 	if err != nil {
 		//// test if we got the custom error
 		if urlError, ok := err.(*url.Error); ok && urlError.Err == REDIRECT_ERROR {
-			log.Println("REDIRECT")
-			log.Println("Working proxy (SOCKS5)", line)
+			log.Println("Working proxy on redirect (SOCKS5)", line)
 			return true
 		}
 
@@ -92,4 +92,16 @@ func testProxy(line string) bool {
 
 	log.Println("Working proxy (SOCKS5)", line)
 	return true
+}
+
+func createSocksProxy(socks5 bool, proxy string) *http.Transport {
+	if socks5 {
+		dialSocksProxy := socks.DialSocksProxy(socks.SOCKS5, proxy)
+		tr := &http.Transport{Dial: dialSocksProxy}
+		return tr;
+	}
+
+	dialSocksProxy := socks.DialSocksProxy(socks.SOCKS4, proxy)
+	tr := &http.Transport{Dial: dialSocksProxy}
+	return tr;
 }
