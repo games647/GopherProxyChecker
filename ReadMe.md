@@ -10,9 +10,11 @@ https://socksproxylist24.blogspot.de/
 ## Features
 
 * Checks SOCKS4/5 proxies
+* Timeout of 5 seconds
 
 ## Planned
 
+* Multi-Threading
 * Country
 * Response time
 * Socks Version
