@@ -16,6 +16,7 @@ https://socksproxylist24.blogspot.de/
 * Socks Version
 * Multi-Threading
 * Country
+* Progress bar
 
 ## Downloads
 
@@ -39,3 +40,4 @@ proxychecker.exe input.txt output.txt
 
 * https://github.com/h12w/socks
 * https://github.com/oschwald/geoip2-golang
+* github.com/cheggaaa/pb

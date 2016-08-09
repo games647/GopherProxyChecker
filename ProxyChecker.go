@@ -14,6 +14,9 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	"net"
 	"strings"
+	"github.com/cheggaaa/pb"
+	"io"
+	"bytes"
 )
 
 const TIMEOUT = time.Duration(5 * time.Second)
@@ -27,6 +30,38 @@ var REDIRECT_ERROR = errors.New("Host redirected to different target")
 func main() {
 	log.Println("Loading input")
 
+	toTest := make(chan Proxy)
+	working := make(chan Proxy, 256)
+	done := make(chan bool)
+
+	var testIndex uint32 = 0
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < WORKER_THREADS; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			for {
+				proxy, more := <-toTest
+				if !more {
+					break
+				}
+
+				index := atomic.AddUint32(&testIndex, 1)
+
+				log.Println(index, "Testing", proxy.host)
+				if proxy.isOnline() {
+					log.Println(index, "Working Socks", proxy.socks5, proxy.host, proxy.time, "ms")
+					working <- proxy
+				}
+			}
+		}()
+	}
+
+	go writeWorkingProxies(working, done)
+
 	input, err := os.Open(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
@@ -34,7 +69,13 @@ func main() {
 
 	defer input.Close()
 
-	working := make([]string, 0)
+	totalLines, err := lineCounter(input)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	input.Seek(0, 0)
+	bar := pb.StartNew(totalLines)
 
 	var db *geoip2.Reader
 	if _, err := os.Stat(GEO_IP_FILE); err == nil {
@@ -53,70 +94,60 @@ func main() {
 		}
 	}()
 
-	var readMutex = &sync.Mutex{}
-	var writeMutex = &sync.Mutex{}
-
-	var testIndex uint32 = 0
-
-	var wg sync.WaitGroup
-
 	scanner := bufio.NewScanner(input)
-	for i := 0; i < WORKER_THREADS; i++ {
-		wg.Add(1)
-		go func() {
-			for {
-				readMutex.Lock()
-				if !scanner.Scan() {
-					readMutex.Unlock()
-					break
-				}
+	for scanner.Scan() {
+		line := scanner.Text()
 
-				proxyLine := scanner.Text()
-				readMutex.Unlock()
+		ip := net.ParseIP(strings.Split(line, ":")[0])
+		countryIso := ""
+		if db != nil {
+			country, err := db.Country(ip)
 
-				index := atomic.AddUint32(&testIndex, 1)
-
-				countryIso := ""
-				if db != nil {
-					ip := net.ParseIP(strings.Split(proxyLine, ":")[0])
-					country, err := db.Country(ip)
-
-					if err == nil {
-						countryIso = country.Country.IsoCode
-					}
-				}
-
-				log.Println("Testing ", index, proxyLine)
-				if works, time := testProxy(proxyLine, true); works {
-					log.Println("Working SOCKS5", index, proxyLine, time, "ms", countryIso)
-
-					writeMutex.Lock()
-					working = append(working, proxyLine)
-					writeMutex.Unlock()
-				} else if works, time := testProxy(proxyLine, false); works {
-					log.Println("Working SOCKS4", index, proxyLine, time, "ms", countryIso)
-
-					writeMutex.Lock()
-					working = append(working, proxyLine)
-					writeMutex.Unlock()
-				}
+			if err == nil {
+				countryIso = country.Country.IsoCode
 			}
+		}
 
-			wg.Done()
-		}()
+		toTest <- Proxy{host: line, country:countryIso}
+		bar.Increment()
 	}
-
-	wg.Wait()
 
 	if err = scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println("Working", working)
-	writeWorkingProxies(working)
+	close(toTest)
+	wg.Wait()
+	//everything is written to the channel
+	close(working)
+
+	<-done
+	bar.Finish()
 }
 
-func writeWorkingProxies(working []string) {
+type Proxy struct {
+	host string
+	country string
+	socks5 bool
+	time int64
+}
+
+func (proxy *Proxy) isOnline() bool {
+	if works, time := testSocksProxy(proxy.host, true); works {
+		proxy.socks5 = true
+		proxy.time = time
+		return true
+	}
+
+	if works, time := testSocksProxy(proxy.host, false); works {
+		proxy.time = time
+		return true
+	}
+
+	return false
+}
+
+func writeWorkingProxies(working <-chan Proxy, done chan<- bool) {
 	if _, err := os.Stat(os.Args[2]); os.IsNotExist(err) {
 		// path doesn't exist does not exist
 		os.Create(os.Args[2])
@@ -130,18 +161,23 @@ func writeWorkingProxies(working []string) {
 	defer output.Close()
 
 	writer := bufio.NewWriter(output)
+	for {
+		proxy, more := <- working
+		if !more {
+			break
+		}
 
-	for _, proxy := range working {
-		_, err := writer.WriteString(proxy + "\n")
+		_, err := writer.WriteString(proxy.host + "\n")
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
 	writer.Flush()
+	done <- true
 }
 
-func testProxy(line string, socks5 bool) (bool, int64) {
+func testSocksProxy(line string, socks5 bool) (bool, int64) {
 	httpClient := &http.Client{
 		Transport: createSocksProxy(socks5, line),
 		Timeout: TIMEOUT,
@@ -153,7 +189,7 @@ func testProxy(line string, socks5 bool) (bool, int64) {
 	start := time.Now()
 	resp, err := httpClient.Get(TEST_TARGET)
 	end := time.Now()
-	responseTime := end.Sub(start).Nanoseconds() / 1000000
+	responseTime := end.Sub(start).Nanoseconds() / time.Millisecond.Nanoseconds()
 	if err != nil {
 		if urlError, ok := err.(*url.Error); ok && urlError.Err == REDIRECT_ERROR {
 			// test if we got the custom error
@@ -166,11 +202,6 @@ func testProxy(line string, socks5 bool) (bool, int64) {
 	}
 
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.Println(resp.StatusCode)
-		return false, 0
-	}
-
 	return true, responseTime
 }
 
@@ -184,4 +215,23 @@ func createSocksProxy(socks5 bool, proxy string) *http.Transport {
 
 	tr := &http.Transport{Dial: dialSocksProxy}
 	return tr;
+}
+
+func lineCounter(r io.Reader) (int, error) {
+	buf := make([]byte, 32*1024)
+	count := 0
+	lineSep := []byte{'\n'}
+
+	for {
+		c, err := r.Read(buf)
+		count += bytes.Count(buf[:c], lineSep)
+
+		switch {
+		case err == io.EOF:
+			return count, nil
+
+		case err != nil:
+			return count, err
+		}
+	}
 }
