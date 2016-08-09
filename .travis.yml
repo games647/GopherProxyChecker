@@ -1,0 +1,9 @@
+# Use https://travis-ci.org/ for automatic testing
+language: go
+
+go:
+# Use only the latest versuib
+  - tip
+
+install:
+  - go get -u "h12.me/socks"
