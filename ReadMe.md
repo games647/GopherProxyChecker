@@ -5,6 +5,7 @@
 Checks socks proxies from popular proxy lists like:
 
 http://www.socks24.org/
+
 https://socksproxylist24.blogspot.de/
 
 ## Features
@@ -20,6 +21,10 @@ https://socksproxylist24.blogspot.de/
 * Socks Version
 * Maybe HTTP Proxies?
 * Specify timeout
+
+## Downloads
+
+https://github.com/games647/GopherProxyChecker/releases
 
 ## How to use
 

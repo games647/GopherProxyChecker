@@ -15,6 +15,8 @@ const TIMEOUT = time.Duration(30 * time.Second)
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
 func main() {
+	log.Println("Loading input")
+
 	input, err := os.Open(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
@@ -52,15 +54,19 @@ func main() {
 		log.Fatal(err)
 	}
 
+	defer output.Close()
+
+	writer := bufio.NewWriter(output)
+
 	for _, proxy := range working {
-		_, err := output.WriteString(proxy + "\n")
+		_, err := writer.WriteString(proxy + "\n")
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
+	writer.Flush()
 	output.Sync()
-	defer output.Close()
 }
 
 func testProxy(line string, socks5 bool) bool {
@@ -74,7 +80,7 @@ func testProxy(line string, socks5 bool) bool {
 
 	resp, err := httpClient.Get("http://www.google.com")
 	if err != nil {
-		//// test if we got the custom error
+		// test if we got the custom error
 		if urlError, ok := err.(*url.Error); ok && urlError.Err == REDIRECT_ERROR {
 			log.Println("Working proxy on redirect (SOCKS5)", line)
 			return true
