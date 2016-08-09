@@ -15,12 +15,7 @@ https://socksproxylist24.blogspot.de/
 * Response time
 * Socks Version
 * Multi-Threading
-
-## Planned
-
 * Country
-* Maybe HTTP Proxies?
-* Specify timeout
 
 ## Downloads
 

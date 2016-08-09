@@ -11,10 +11,14 @@ import (
 	"net/url"
 	"sync"
 	"sync/atomic"
+	"github.com/oschwald/geoip2-golang"
+	"net"
 )
 
 const TIMEOUT = time.Duration(5 * time.Second)
 const WORKER_THREADS = 30
+//downloadable at: https://dev.maxmind.com/geoip/geoip2/geolite2/
+const GEO_IP_FILE = "GeoLite2-Country.mmdb"
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
 func main() {
@@ -28,6 +32,17 @@ func main() {
 	defer input.Close()
 
 	working := make([]string, 0)
+
+	var db geoip2.Reader = nil
+	if _, err := os.Stat(os.Args[2]); os.IsExist(err) {
+		db, err := geoip2.Open(GEO_IP_FILE)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		defer db.Close()
+	}
+
 
 	var readMutex = &sync.Mutex{}
 	var writeMutex = &sync.Mutex{}
@@ -50,15 +65,25 @@ func main() {
 
 			index := atomic.AddUint32(&testIndex, 1)
 
+			countryIso := ""
+			if db != nil {
+				ip := net.ParseIP(proxyLine)
+				country, err := db.Country(ip)
+
+				if err == nil {
+					countryIso = country.Country.IsoCode
+				}
+			}
+
 			log.Println("Testing ", index, proxyLine)
 			if works, time := testProxy(proxyLine, true); works {
-				log.Println("Working SOCKS4", index, proxyLine, time, "ms")
+				log.Println("Working SOCKS4", index, proxyLine, time, "ms", countryIso)
 
 				writeMutex.Lock()
 				working = append(working, proxyLine)
 				writeMutex.Unlock()
 			} else if works, time := testProxy(proxyLine, false); works {
-				log.Println("Working SOCKS4", index, proxyLine, time, "ms")
+				log.Println("Working SOCKS4", index, proxyLine, time, "ms", countryIso)
 
 				writeMutex.Lock()
 				working = append(working, proxyLine)
