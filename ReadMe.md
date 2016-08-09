@@ -38,3 +38,4 @@ proxychecker.exe input.txt output.txt
 ## Credits
 
 * https://github.com/h12w/socks
+* https://github.com/oschwald/geoip2-golang
