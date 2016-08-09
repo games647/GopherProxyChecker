@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 )
 
-const TIMEOUT = time.Duration(30 * time.Second)
+const TIMEOUT = time.Duration(5 * time.Second)
 const WORKER_THREADS = 30
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
@@ -51,15 +51,14 @@ func main() {
 			index := atomic.AddUint32(&testIndex, 1)
 
 			log.Println("Testing ", index, proxyLine)
-
-			if testProxy(proxyLine, true) {
-				log.Println("Working SOCKS4", index, proxyLine)
+			if works, time := testProxy(proxyLine, true); works {
+				log.Println("Working SOCKS4", index, proxyLine, time, "ms")
 
 				writeMutex.Lock()
 				working = append(working, proxyLine)
 				writeMutex.Unlock()
-			} else if testProxy(proxyLine, false) {
-				log.Println("Working SOCKS4", index, proxyLine)
+			} else if works, time := testProxy(proxyLine, false); works {
+				log.Println("Working SOCKS4", index, proxyLine, time, "ms")
 
 				writeMutex.Lock()
 				working = append(working, proxyLine)
@@ -105,7 +104,7 @@ func writeWorkingProxies(working []string) {
 	writer.Flush()
 }
 
-func testProxy(line string, socks5 bool) bool {
+func testProxy(line string, socks5 bool) (bool, int64) {
 	httpClient := &http.Client{
 		Transport: createSocksProxy(socks5, line),
 		Timeout: TIMEOUT,
@@ -114,25 +113,28 @@ func testProxy(line string, socks5 bool) bool {
 		},
 	}
 
+	start := time.Now()
 	resp, err := httpClient.Get("http://www.google.com")
+	end := time.Now()
+	responseTime := end.Sub(start).Nanoseconds() / 1000000
 	if err != nil {
 		// test if we got the custom error
 		if urlError, ok := err.(*url.Error); ok && urlError.Err == REDIRECT_ERROR {
 			log.Println("Redirect", line)
-			return true
+			return true, responseTime
 		}
 
 		log.Println(err)
-		return false
+		return false, 0
 	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		log.Println(resp.StatusCode)
-		return false
+		return false, 0
 	}
 
-	return true
+	return true, responseTime
 }
 
 func createSocksProxy(socks5 bool, proxy string) *http.Transport {

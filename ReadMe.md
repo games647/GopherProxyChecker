@@ -12,13 +12,13 @@ https://socksproxylist24.blogspot.de/
 
 * Checks SOCKS4/5 proxies
 * Timeout of 5 seconds
+* Response time
+* Socks Version
 * Multi-Threading
 
 ## Planned
 
 * Country
-* Response time
-* Socks Version
 * Maybe HTTP Proxies?
 * Specify timeout
 
