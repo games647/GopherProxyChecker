@@ -17,6 +17,7 @@ import (
 	"github.com/cheggaaa/pb"
 	"io"
 	"bytes"
+	"fmt"
 )
 
 const TIMEOUT = time.Duration(5 * time.Second)
@@ -28,7 +29,17 @@ const TEST_TARGET = "http://216.58.210.14"
 
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
+type logWriter struct {
+}
+
+func (writer logWriter) Write(bytes []byte) (int, error) {
+	return fmt.Print(string(bytes))
+}
+
 func main() {
+	log.SetFlags(0)
+	log.SetOutput(new(logWriter))
+
 	log.Println("Loading input")
 
 	toTest := make(chan Proxy)
@@ -127,10 +138,10 @@ func main() {
 }
 
 type Proxy struct {
-	host string
+	host    string
 	country string
-	socks5 bool
-	time int64
+	socks5  bool
+	time    int64
 }
 
 func (proxy *Proxy) isOnline() bool {
@@ -148,12 +159,11 @@ func (proxy *Proxy) isOnline() bool {
 	return false
 }
 
-func writeWorkingProxies(working <-chan Proxy, done chan<- bool) {
+func writeWorkingProxies(working <-chan Proxy, done chan <- bool) {
 	if _, err := os.Stat(os.Args[2]); err == nil {
 		// path doesn't exist does not exist
 		os.Remove(os.Args[2])
 	}
-
 
 	output, err := os.Create(os.Args[2])
 	if err != nil {
@@ -164,7 +174,7 @@ func writeWorkingProxies(working <-chan Proxy, done chan<- bool) {
 
 	writer := bufio.NewWriter(output)
 	for {
-		proxy, more := <- working
+		proxy, more := <-working
 		if !more {
 			break
 		}
@@ -220,7 +230,7 @@ func createSocksProxy(socks5 bool, proxy string) *http.Transport {
 }
 
 func lineCounter(r io.Reader) (int, error) {
-	buf := make([]byte, 32*1024)
+	buf := make([]byte, 32 * 1024)
 	count := 0
 	lineSep := []byte{'\n'}
 
