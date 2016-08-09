@@ -9,9 +9,12 @@ import (
 	"bufio"
 	"errors"
 	"net/url"
+	"sync"
+	"sync/atomic"
 )
 
 const TIMEOUT = time.Duration(30 * time.Second)
+const WORKER_THREADS = 30
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
 func main() {
@@ -26,24 +29,58 @@ func main() {
 
 	working := make([]string, 0)
 
-	scanner := bufio.NewScanner(input)
-	for scanner.Scan() {
-		proxyLine := scanner.Text()
-		log.Println("Testing ", proxyLine)
+	var readMutex = &sync.Mutex{}
+	var writeMutex = &sync.Mutex{}
 
-		if testProxy(proxyLine, true) {
-			working = append(working, proxyLine)
-		} else if testProxy(proxyLine, false) {
-			log.Println("Working SOCKS4")
-			working = append(working, proxyLine)
-		}
+	var testIndex uint32 = 0
+
+	var wg sync.WaitGroup
+
+	scanner := bufio.NewScanner(input)
+	for i := 0; i < WORKER_THREADS; i++ {
+		wg.Add(1)
+		go func() {
+			readMutex.Lock()
+			if (!scanner.Scan()) {
+				return
+			}
+
+			proxyLine := scanner.Text()
+			readMutex.Unlock()
+
+			index := atomic.AddUint32(&testIndex, 1)
+
+			log.Println("Testing ", index, proxyLine)
+
+			if testProxy(proxyLine, true) {
+				log.Println("Working SOCKS4", index, proxyLine)
+
+				writeMutex.Lock()
+				working = append(working, proxyLine)
+				writeMutex.Unlock()
+			} else if testProxy(proxyLine, false) {
+				log.Println("Working SOCKS4", index, proxyLine)
+
+				writeMutex.Lock()
+				working = append(working, proxyLine)
+				writeMutex.Unlock()
+			}
+
+			wg.Done()
+		}()
 	}
+
+	wg.Wait()
 
 	if err = scanner.Err(); err != nil {
 		log.Fatal(err)
 	}
 
 	log.Println("Working", working)
+	writeWorkingProxies(working)
+}
+
+func writeWorkingProxies(working []string) {
 	if _, err := os.Stat(os.Args[2]); os.IsNotExist(err) {
 		// path doesn't exist does not exist
 		os.Create(os.Args[2])
@@ -66,7 +103,6 @@ func main() {
 	}
 
 	writer.Flush()
-	output.Sync()
 }
 
 func testProxy(line string, socks5 bool) bool {
@@ -82,7 +118,7 @@ func testProxy(line string, socks5 bool) bool {
 	if err != nil {
 		// test if we got the custom error
 		if urlError, ok := err.(*url.Error); ok && urlError.Err == REDIRECT_ERROR {
-			log.Println("Working proxy on redirect (SOCKS5)", line)
+			log.Println("Redirect", line)
 			return true
 		}
 
@@ -96,7 +132,6 @@ func testProxy(line string, socks5 bool) bool {
 		return false
 	}
 
-	log.Println("Working proxy (SOCKS5)", line)
 	return true
 }
 

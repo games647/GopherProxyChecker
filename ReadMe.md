@@ -12,10 +12,10 @@ https://socksproxylist24.blogspot.de/
 
 * Checks SOCKS4/5 proxies
 * Timeout of 5 seconds
+* Multi-Threading
 
 ## Planned
 
-* Multi-Threading
 * Country
 * Response time
 * Socks Version
