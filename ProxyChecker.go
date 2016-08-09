@@ -17,7 +17,7 @@ import (
 )
 
 const TIMEOUT = time.Duration(5 * time.Second)
-const WORKER_THREADS = 30
+const WORKER_THREADS = 1
 //downloadable at: https://dev.maxmind.com/geoip/geoip2/geolite2/
 const GEO_IP_FILE = "GeoLite2-Country.mmdb"
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
@@ -35,18 +35,25 @@ func main() {
 	working := make([]string, 0)
 
 	var dbAvailable bool = false
-	var db geoip2.Reader
-	if _, err := os.Stat(GEO_IP_FILE); os.IsExist(err) {
+	var db *geoip2.Reader
+	if _, err := os.Stat(GEO_IP_FILE); err == nil {
 		log.Println("GEO-IP File found")
-		db, err := geoip2.Open(GEO_IP_FILE)
+		dbFile, err := geoip2.Open(GEO_IP_FILE)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		dbAvailable = true
-
-		defer db.Close()
+		//log.Fatal(reflect.TypeOf(dbFile))
+		db = dbFile
+		//defer db.Close()
 	}
+
+	defer func() {
+		if db != nil {
+			db.Close()
+		}
+	}()
 
 
 	var readMutex = &sync.Mutex{}
@@ -76,7 +83,6 @@ func main() {
 				if dbAvailable {
 					ip := net.ParseIP(strings.Split(proxyLine, ":")[0])
 					country, err := db.Country(ip)
-					log.Println(strings.Split(proxyLine, ":")[0])
 
 					if err == nil {
 						countryIso = country.Country.IsoCode
