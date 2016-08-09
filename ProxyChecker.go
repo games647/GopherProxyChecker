@@ -20,6 +20,8 @@ const TIMEOUT = time.Duration(5 * time.Second)
 const WORKER_THREADS = 30
 //downloadable at: https://dev.maxmind.com/geoip/geoip2/geolite2/
 const GEO_IP_FILE = "GeoLite2-Country.mmdb"
+const TEST_TARGET = "http://www.google.com"
+
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
 func main() {
@@ -34,7 +36,6 @@ func main() {
 
 	working := make([]string, 0)
 
-	var dbAvailable bool = false
 	var db *geoip2.Reader
 	if _, err := os.Stat(GEO_IP_FILE); err == nil {
 		log.Println("GEO-IP File found")
@@ -43,10 +44,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		dbAvailable = true
-		//log.Fatal(reflect.TypeOf(dbFile))
 		db = dbFile
-		//defer db.Close()
 	}
 
 	defer func() {
@@ -54,7 +52,6 @@ func main() {
 			db.Close()
 		}
 	}()
-
 
 	var readMutex = &sync.Mutex{}
 	var writeMutex = &sync.Mutex{}
@@ -69,7 +66,7 @@ func main() {
 		go func() {
 			for {
 				readMutex.Lock()
-				if (!scanner.Scan()) {
+				if !scanner.Scan() {
 					readMutex.Unlock()
 					break
 				}
@@ -80,7 +77,7 @@ func main() {
 				index := atomic.AddUint32(&testIndex, 1)
 
 				countryIso := ""
-				if dbAvailable {
+				if db != nil {
 					ip := net.ParseIP(strings.Split(proxyLine, ":")[0])
 					country, err := db.Country(ip)
 
@@ -91,7 +88,7 @@ func main() {
 
 				log.Println("Testing ", index, proxyLine)
 				if works, time := testProxy(proxyLine, true); works {
-					log.Println("Working SOCKS4", index, proxyLine, time, "ms", countryIso)
+					log.Println("Working SOCKS5", index, proxyLine, time, "ms", countryIso)
 
 					writeMutex.Lock()
 					working = append(working, proxyLine)
@@ -154,12 +151,12 @@ func testProxy(line string, socks5 bool) (bool, int64) {
 	}
 
 	start := time.Now()
-	resp, err := httpClient.Get("http://www.google.com")
+	resp, err := httpClient.Get(TEST_TARGET)
 	end := time.Now()
 	responseTime := end.Sub(start).Nanoseconds() / 1000000
 	if err != nil {
-		// test if we got the custom error
 		if urlError, ok := err.(*url.Error); ok && urlError.Err == REDIRECT_ERROR {
+			// test if we got the custom error
 			log.Println("Redirect", line)
 			return true, responseTime
 		}
@@ -178,13 +175,13 @@ func testProxy(line string, socks5 bool) (bool, int64) {
 }
 
 func createSocksProxy(socks5 bool, proxy string) *http.Transport {
+	var dialSocksProxy func(string, string) (net.Conn, error)
 	if socks5 {
-		dialSocksProxy := socks.DialSocksProxy(socks.SOCKS5, proxy)
-		tr := &http.Transport{Dial: dialSocksProxy}
-		return tr;
+		dialSocksProxy = socks.DialSocksProxy(socks.SOCKS5, proxy)
+	} else {
+		dialSocksProxy = socks.DialSocksProxy(socks.SOCKS4, proxy)
 	}
 
-	dialSocksProxy := socks.DialSocksProxy(socks.SOCKS4, proxy)
 	tr := &http.Transport{Dial: dialSocksProxy}
 	return tr;
 }
