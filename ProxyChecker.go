@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"github.com/oschwald/geoip2-golang"
 	"net"
+	"strings"
 )
 
 const TIMEOUT = time.Duration(5 * time.Second)
@@ -35,7 +36,8 @@ func main() {
 
 	var dbAvailable bool = false
 	var db geoip2.Reader
-	if _, err := os.Stat(os.Args[2]); os.IsExist(err) {
+	if _, err := os.Stat(GEO_IP_FILE); os.IsExist(err) {
+		log.Println("GEO-IP File found")
 		db, err := geoip2.Open(GEO_IP_FILE)
 		if err != nil {
 			log.Fatal(err)
@@ -58,39 +60,43 @@ func main() {
 	for i := 0; i < WORKER_THREADS; i++ {
 		wg.Add(1)
 		go func() {
-			readMutex.Lock()
-			if (!scanner.Scan()) {
-				return
-			}
-
-			proxyLine := scanner.Text()
-			readMutex.Unlock()
-
-			index := atomic.AddUint32(&testIndex, 1)
-
-			countryIso := ""
-			if dbAvailable {
-				ip := net.ParseIP(proxyLine)
-				country, err := db.Country(ip)
-
-				if err == nil {
-					countryIso = country.Country.IsoCode
+			for {
+				readMutex.Lock()
+				if (!scanner.Scan()) {
+					readMutex.Unlock()
+					break
 				}
-			}
 
-			log.Println("Testing ", index, proxyLine)
-			if works, time := testProxy(proxyLine, true); works {
-				log.Println("Working SOCKS4", index, proxyLine, time, "ms", countryIso)
+				proxyLine := scanner.Text()
+				readMutex.Unlock()
 
-				writeMutex.Lock()
-				working = append(working, proxyLine)
-				writeMutex.Unlock()
-			} else if works, time := testProxy(proxyLine, false); works {
-				log.Println("Working SOCKS4", index, proxyLine, time, "ms", countryIso)
+				index := atomic.AddUint32(&testIndex, 1)
 
-				writeMutex.Lock()
-				working = append(working, proxyLine)
-				writeMutex.Unlock()
+				countryIso := ""
+				if dbAvailable {
+					ip := net.ParseIP(strings.Split(proxyLine, ":")[0])
+					country, err := db.Country(ip)
+					log.Println(strings.Split(proxyLine, ":")[0])
+
+					if err == nil {
+						countryIso = country.Country.IsoCode
+					}
+				}
+
+				log.Println("Testing ", index, proxyLine)
+				if works, time := testProxy(proxyLine, true); works {
+					log.Println("Working SOCKS4", index, proxyLine, time, "ms", countryIso)
+
+					writeMutex.Lock()
+					working = append(working, proxyLine)
+					writeMutex.Unlock()
+				} else if works, time := testProxy(proxyLine, false); works {
+					log.Println("Working SOCKS4", index, proxyLine, time, "ms", countryIso)
+
+					writeMutex.Lock()
+					working = append(working, proxyLine)
+					writeMutex.Unlock()
+				}
 			}
 
 			wg.Done()
