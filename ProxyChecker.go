@@ -17,7 +17,7 @@ import (
 )
 
 const TIMEOUT = time.Duration(5 * time.Second)
-const WORKER_THREADS = 1
+const WORKER_THREADS = 30
 //downloadable at: https://dev.maxmind.com/geoip/geoip2/geolite2/
 const GEO_IP_FILE = "GeoLite2-Country.mmdb"
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
