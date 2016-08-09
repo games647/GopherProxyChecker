@@ -23,7 +23,8 @@ const TIMEOUT = time.Duration(5 * time.Second)
 const WORKER_THREADS = 30
 //downloadable at: https://dev.maxmind.com/geoip/geoip2/geolite2/
 const GEO_IP_FILE = "GeoLite2-Country.mmdb"
-const TEST_TARGET = "http://www.google.com"
+//ip of google
+const TEST_TARGET = "http://216.58.210.14"
 
 var REDIRECT_ERROR = errors.New("Host redirected to different target")
 
@@ -148,12 +149,13 @@ func (proxy *Proxy) isOnline() bool {
 }
 
 func writeWorkingProxies(working <-chan Proxy, done chan<- bool) {
-	if _, err := os.Stat(os.Args[2]); os.IsNotExist(err) {
+	if _, err := os.Stat(os.Args[2]); err == nil {
 		// path doesn't exist does not exist
-		os.Create(os.Args[2])
+		os.Remove(os.Args[2])
 	}
 
-	output, err := os.OpenFile(os.Args[2], os.O_RDWR, 0644)
+
+	output, err := os.Create(os.Args[2])
 	if err != nil {
 		log.Fatal(err)
 	}
