@@ -9,4 +9,3 @@ install:
 # Resolve dependencies
   - go get -u "h12.me/socks"
   - go get -u "github.com/oschwald/geoip2-golang"
-  - go get -u "github.com/cheggaaa/pb"

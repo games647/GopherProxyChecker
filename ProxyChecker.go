@@ -14,7 +14,6 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	"net"
 	"strings"
-	"github.com/cheggaaa/pb"
 	"io"
 	"bytes"
 	"fmt"
@@ -46,7 +45,8 @@ func main() {
 	working := make(chan Proxy, 256)
 	done := make(chan bool)
 
-	var testIndex uint32 = 0
+	var testIndex int32 = 0
+	var totalProxies int = 0
 
 	var wg sync.WaitGroup
 
@@ -61,9 +61,9 @@ func main() {
 					break
 				}
 
-				index := atomic.AddUint32(&testIndex, 1)
+				index := atomic.AddInt32(&testIndex, 1)
 
-				log.Println(index, "Testing", proxy.host)
+				log.Printf("[%d / %d] %s %s", testIndex, totalProxies, "Testing", proxy.host)
 				if proxy.isOnline() {
 					log.Println(index, "Working Socks", proxy.socks5, proxy.host, proxy.time, "ms")
 					working <- proxy
@@ -86,8 +86,9 @@ func main() {
 		log.Fatal(err)
 	}
 
+	totalProxies = totalLines
+
 	input.Seek(0, 0)
-	bar := pb.StartNew(totalLines)
 
 	var db *geoip2.Reader
 	if _, err := os.Stat(GEO_IP_FILE); err == nil {
@@ -121,7 +122,6 @@ func main() {
 		}
 
 		toTest <- Proxy{host: line, country:countryIso}
-		bar.Increment()
 	}
 
 	if err = scanner.Err(); err != nil {
@@ -134,7 +134,6 @@ func main() {
 	close(working)
 
 	<-done
-	bar.Finish()
 }
 
 type Proxy struct {
