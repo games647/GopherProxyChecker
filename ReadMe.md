@@ -4,9 +4,11 @@
 
 Checks socks proxies from popular proxy lists like:
 
-http://www.socks24.org/
-
-https://socksproxylist24.blogspot.de/
+* http://www.socks24.org/
+* https://socksproxylist24.blogspot.de/
+* http://www.vipsocks24.net/
+* http://proxysearcher.sourceforge.net/Proxy%20List.php?type=socks
+* https://free-socks24.blogspot.de/
 
 ## Features
 
