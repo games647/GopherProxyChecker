@@ -9,3 +9,9 @@ install:
 # Resolve dependencies
   - go get -u "h12.me/socks"
   - go get -u "github.com/oschwald/geoip2-golang"
+
+script:
+  - go test -v ./...
+  - GOOS=windows GOARCH=386 go build -o hello-windows.exe *.go
+  - GOOS=darwin GOARCH=386 go build -o hello-mac *.go
+  - GOOS=linux GOARCH=386 go build -o hello-linux *.go
