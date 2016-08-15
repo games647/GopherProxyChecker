@@ -19,6 +19,7 @@ Checks socks proxies from popular proxy lists like:
 * Multi-Threading
 * Country
 * Progress bar
+* Filter duplicate entries
 
 ## Downloads
 

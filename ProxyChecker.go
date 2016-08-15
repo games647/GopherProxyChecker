@@ -17,6 +17,7 @@ import (
 	"io"
 	"bytes"
 	"fmt"
+	"hash/fnv"
 )
 
 const TIMEOUT = time.Duration(5 * time.Second)
@@ -171,6 +172,8 @@ func writeWorkingProxies(working <-chan Proxy, done chan <- bool) {
 
 	defer output.Close()
 
+	//hash of already inserted proxies for faster compares
+	uniqueMap := make(map[uint32]struct{})
 	writer := bufio.NewWriter(output)
 	for {
 		proxy, more := <-working
@@ -178,7 +181,14 @@ func writeWorkingProxies(working <-chan Proxy, done chan <- bool) {
 			break
 		}
 
-		_, err := writer.WriteString(proxy.host + "\n")
+		address := proxy.host
+		addressHash := hash(address)
+		if _, present := uniqueMap[addressHash]; present {
+			break
+		}
+
+		uniqueMap[addressHash] = struct{}{}
+		_, err := writer.WriteString(address + "\n")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -188,6 +198,11 @@ func writeWorkingProxies(working <-chan Proxy, done chan <- bool) {
 	done <- true
 }
 
+func hash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
+}
 func testSocksProxy(line string, socks5 bool) (bool, int64) {
 	httpClient := &http.Client{
 		Transport: createSocksProxy(socks5, line),
